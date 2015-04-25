@@ -1,0 +1,237 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+   <title>Network Programming (CSE 533) | Unix Pipes &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </title>
+   <link REL="stylesheet" HREF="cse533.css">
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+</head>
+<body>
+
+<table cellpadding="10">
+<tr><td valign="top" align="left" class="title-white"><br>Network Programming<br><br></td>
+<td valign="bottom" align="right" class="title-mov"><br>Unix Pipes</td></tr>
+</table>
+
+<br><br>
+A pipe is used for one-way communication of a stream of bytes.  The command to create a pipe is <b><i>pipe()</i></b>, which takes an array of two integers. It fills in the array with two file descriptors that can be used for low-level I/O.
+
+<h3>Creating a pipe</h3>
+<pre>
+int pfd[2];
+
+pipe(pfd);
+</pre>
+
+<img src="pipes_files/pipe.gif" alt="pipe">
+
+
+<h3>I/O with a pipe</h3>
+These two file descriptors can be used for block I/O
+<pre>
+write(pfd[1], buf, size);
+read(pfd[0], buf, SIZE);
+</pre>
+
+<h3>Fork and a pipe</h3>
+A single process would not use a pipe. They are used when two processes wish to communicate in a one-way fashion. A process splits in two using <b><i>fork()</i></b>. A pipe opened before the fork becomes shared between the two processes.
+<br><br>
+Before fork
+<p>
+<img src="pipes_files/pipe_before.gif" alt="pipe">
+</p>
+<br>
+After fork
+<p>
+<img src="pipes_files/pipe_after.gif" alt="pipe">
+</p>
+<br>
+This gives <i>two </i>read ends and <i>two </i>write ends. The read end of the pipe will not be closed until both of the read ends are closed, and the write end will not be closed until both the write ends are closed.
+<br><br>
+Either process can write into the pipe, and either can read from it. Which process will get what is not known.
+<br><br>
+For predictable behaviour, one of the processes must close its read end, and the other must close its write end. Then it will become a simple pipeline again.
+<p>
+<img src="pipes_files/pipe_close.gif" alt="pipe">
+</p><br>
+
+Suppose the parent wants to write down a pipeline to a child. The parent closes its read end, and writes into the other end. The child closes its write end and reads from the other end.
+<br><br>
+When the processes have ceased communication, the parent closes its write end. This means that the child gets eof on its next read, and it can close its read end.
+
+<pre>
+#include &lt;stdio.h&gt;
+
+#define SIZE 1024
+
+int main(int argc, char **argv)
+{
+  int pfd[2];
+  int nread;
+  int pid;
+  char buf[SIZE];
+
+  if (pipe(pfd) == -1)
+  {
+    perror("pipe failed");
+    exit(1);
+  }
+  if ((pid = fork()) &lt; 0)
+  {
+    perror("fork failed");
+    exit(2);
+  }
+
+  if (pid == 0)
+  {
+    /* child */
+    close(pfd[1]);
+    while ((nread =
+	 read(pfd[0], buf, SIZE))
+	 != 0)
+      printf("child read %s\n", buf);
+    close(pfd[0]);
+  } else {
+    /* parent */
+    close(pfd[0]);
+    strcpy(buf, "hello...");
+    /* include null terminator in write */
+    write(pfd[1], buf,
+	  strlen(buf)+1);
+    close(pfd[1]);
+  }
+  exit(0);
+}
+
+</pre>
+
+
+<h3>dup</h3>
+A pipeline works because the two processes know the file descriptor of each end of the pipe. Each process has a stdin (0), a stdout (1) and a stderr (2). 
+The file descriptors will depend on which other files have been opened, but could be 3 and 4, say.
+
+<br><br>Suppose one of the processes replaces itself by an ``exec''. The new process will have files for descriptors 0, 1, 2, 3 and 4 open. How will it know which 
+are the ones belonging to the pipe? It can't.
+
+<h3>Example: </h3>
+To implement ``ls | wc'' the shell will have created a pipe and then forked. The parent will exec to be replaced by ``ls'', and the child will exec to be replaced by ``wc'' The write end of the pipe may be descriptor 3 and the read end may be descriptor 4. ``ls'' normally writes to 1 and ``wc'' normally reads from 0. How do these get matched up?
+
+<br>
+<img src="pipes_files/pre_dup.gif" alt="pipe">
+<br>
+
+The <b><i>dup2()</i></b> function call takes an existing file descriptor, and another one that it ``would like to be''. Here, fd=3 would also like to be 1, and fd=4 would like to be 0. So we dup2 fd=3 as 1, and dup2 fd=4 as 0. Then the old fd=3 and fd=4 can be closed as they are no longer needed.
+<br><br>
+After dup2
+<br>
+<p>
+<img src="pipes_files/dup.gif" alt="pipe">
+</p><br>
+
+After close
+<p>
+<img src="pipes_files/post_dup.gif" alt="pipe">
+</p><br>
+
+Without any error checks, the program to do this is
+
+<pre>int main(void)
+{
+  int pfd[2];
+
+  pipe(pfd);
+  if (fork() == 0) {
+    close(pfd[1]);
+    dup2(pfd[0], 0);
+    close(pfd[0]);
+    execlp("wc", "wc",
+           (char *) 0);
+  } else {
+    close(pfd[0]);
+    dup2(pfd[1], 1);
+    close(pfd[1]);
+    execlp("ls", "ls",
+           (char *) 0);
+  }
+}
+</pre>
+
+<br><br>
+
+With checks, it is
+
+
+<pre>#include &lt;stdio.h&gt;
+
+int main(void)
+{
+  int pfd[2];
+  int pid;
+
+  if (pipe(pfd) == -1)
+  {
+    perror("pipe failed");
+    exit(1);
+  }
+  if ((pid = fork()) &lt; 0)
+  {
+    perror("fork failed");
+    exit(2);
+  }
+  if (pid == 0)
+  {
+    close(pfd[1]);
+    dup2(pfd[0], 0);
+    close(pfd[0]);
+    execlp("wc", "wc",
+           (char *) 0);
+    perror("wc failed");
+    exit(3);
+  } else {
+    close(pfd[0]);
+    dup2(pfd[1], 1);
+    close(pfd[1]);
+    execlp("ls", "ls",
+           (char *) 0);
+    perror("ls failed");
+    exit(4);
+  }
+  exit(0);
+}
+
+</pre>
+
+
+
+
+<h3>
+Variations
+</h3>
+Some common variations on this method of IPC are:
+<ul>
+<li>A process may want to both write to and read from a child. In this case it creates two pipes. One of these is used by the parent for writing and by the child for reading. The other is used by the child for writing and the parent for reading.<br></li>
+<li>A pipeline may consist of three or more process (such as a C version of 
+<code> ps | sed 1d | wc -l </code>). In this case there are lots of choices
+  <ol>
+  <li>The parent can fork twice to give two children.</li>
+  <li>The parent can fork once and the child can fork once, giving a parent, child and grandchild.</li>
+  <li>The parent can create two pipes before any forking. After a fork therewill then be a total of 8 ends open (2 processes * two ends * 2 pipes). Most of these wil have to be closed to ensure that there ends up only one read and only one write end.</li>
+  <li>As many ends as possible of a pipe may be closed before a fork. This minimises the number of closes that have to be done after forking.</li>
+  </ol>
+</li>
+</ul>
+
+<br>
+
+<p></p><hr><p></p>
+  <p>
+    <a href="http://validator.w3.org/check/referer"><img border="0"
+        src="http://www.w3.org/Icons/valid-html401"
+        alt="Valid HTML 4.01!" height="31" width="88"></a>
+    <a href="http://jigsaw.w3.org/css-validator/check/referer">
+       <img style="border:0;width:88px;height:31px"
+             src="http://jigsaw.w3.org/css-validator/images/vcss"
+             alt="Valid CSS!"></a>
+  </p>
+
+</body>
+</html>

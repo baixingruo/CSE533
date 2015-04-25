@@ -1,0 +1,93 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html><head><meta content="text/html; charset=ISO-8859-1" http-equiv="Content-Type"><title>RAW ethernet</title><meta name="generator" content="DocBook XSL Stylesheets V1.50.0"><link rel="home" href="index.html" title="Linux Network Performance"><link rel="up" href="ch01.html" title="Chapter 1. RAW ethernet programming"><link rel="previous" href="ch01s02.html" title="UDP"><link rel="next" href="ch02.html" title="Chapter 2. Testing Environment"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">RAW ethernet</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="ch01s02.html">Prev</a> </td><th width="60%" align="center">Chapter 1. RAW ethernet programming</th><td width="20%" align="right"> <a accesskey="n" href="ch02.html">Next</a></td></tr></table><hr></div><div class="sect1"><div class="titlepage"><div><h2 class="title" style="clear: both"><a name="id2766376"></a>RAW ethernet</h2></div></div><p>
+				Now let us look at RAW ethernet communication. From the programmers' point of view it is quite
+				similar to UDP. The differences are:
+				</p><div class="itemizedlist"><ul type="disc"><li><p>the parameters for the function used to create a socket</p></li><li><p>instead of IP addresses MAC addresses are used</p></li><li><p>an ethernet frame needs to be created manually</p></li></ul></div><p>
+			</p><div class="sect2"><div class="titlepage"><div><h3 class="title"><a name="id2766238"></a>ethernet Frame Spec (IEEE 802.3)</h3></div></div><p>
+					</p><div class="mediaobject"><img src="ethernet_frame.png"></div><p>
+				</p></div><div class="sect2"><div class="titlepage"><div><h3 class="title"><a name="id2766267"></a>Example Code</h3></div></div><div class="example"><p class="title"><b>Example 1.4. Create a RAW ethernet socket</b></p><pre class="programlisting">#include &lt;sys/socket.h&gt;
+#include &lt;linux/if_packet.h&gt;
+#include &lt;linux/if_ether.h&gt;
+#include &lt;linux/if_arp.h&gt;
+
+...
+
+int s; /*socketdescriptor*/
+
+s = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+if (s == -1) { errorhandling ... }</pre></div><div class="example"><p class="title"><b>Example 1.5. Send a RAW ethernet frame</b></p><pre class="programlisting">#define ETH_FRAME_LEN 1518
+
+...
+
+/*target address*/
+struct sockaddr_ll socket_address;
+
+/*buffer for ethernet frame*/
+void* buffer = (void*)malloc(ETH_FRAME_LEN);
+ 
+/*pointer to ethenet header*/
+unsigned char* etherhead = buffer;
+	
+/*userdata in ethernet frame*/
+unsigned char* data = buffer + 14;
+	
+/*another pointer to ethernet header*/
+struct ethhdr *eh = (struct ethhdr *)etherhead;
+ 
+int send_result = 0;
+
+/*our MAC address*/
+unsigned char src_mac[6] = {0x00, 0x01, 0x02, 0xFA, 0x70, 0xAA};
+
+/*other host MAC address*/
+unsigned char dest_mac[6] = {0x00, 0x04, 0x75, 0xC8, 0x28, 0xE5};
+
+/*prepare sockaddr_ll*/
+
+/*RAW communication*/
+socket_address.sll_family   = PF_PACKET;	
+/*we don't use a protocoll above ethernet layer
+  -&gt;just use anything here*/
+socket_address.sll_protocol = htons(ETH_P_IP);	
+
+/*index of the network device
+see full code later how to retrieve it*/
+socket_address.sll_ifindex  = 2;
+
+/*ARP hardware identifier is ethernet*/
+socket_address.sll_hatype   = ARPHRD_ETHER;
+	
+/*target is another host*/
+socket_address.sll_pkttype  = PACKET_OTHERHOST;
+
+/*address length*/
+socket_address.sll_halen    = ETH_ALEN;		
+/*MAC - begin*/
+socket_address.sll_addr[0]  = 0x00;		
+socket_address.sll_addr[1]  = 0x04;		
+socket_address.sll_addr[2]  = 0x75;
+socket_address.sll_addr[3]  = 0xC8;
+socket_address.sll_addr[4]  = 0x28;
+socket_address.sll_addr[5]  = 0xE5;
+/*MAC - end*/
+socket_address.sll_addr[6]  = 0x00;/*not used*/
+socket_address.sll_addr[7]  = 0x00;/*not used*/
+
+
+/*set the frame header*/
+memcpy((void*)buffer, (void*)dest_mac, ETH_ALEN);
+memcpy((void*)(buffer+ETH_ALEN), (void*)src_mac, ETH_ALEN);
+eh-&gt;h_proto = 0x00;
+/*fill the frame with some data*/
+for (j = 0; j &lt; 1500; j++) {
+	data[j] = (unsigned char)((int) (255.0*rand()/(RAND_MAX+1.0)));
+}
+
+/*send the packet*/
+send_result = sendto(s, buffer, ETH_FRAME_LEN, 0, 
+	      (struct sockaddr*)&amp;socket_address, sizeof(socket_address));
+if (send_result == -1) { errorhandling... }</pre></div><div class="example"><p class="title"><b>Example 1.6. Receive a RAW ethernet frame</b></p><pre class="programlisting">void* buffer = (void*)malloc(ETH_FRAME_LEN); /*Buffer for ethernet frame*/
+int length = 0; /*length of the received frame*/ 
+...
+length = recvfrom(s, buffer, ETH_FRAME_LEN, 0, NULL, NULL);
+if (length == -1) { errorhandling .... }</pre></div></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="ch01s02.html">Prev</a> </td><td width="20%" align="center"><a accesskey="u" href="ch01.html">Up</a></td><td width="40%" align="right"> <a accesskey="n" href="ch02.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">UDP </td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top"> Chapter 2. Testing Environment</td></tr></table></div></body></html>

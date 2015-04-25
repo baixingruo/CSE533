@@ -1,0 +1,247 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+   <title>Network Programming (CSE 533) | Assignment 4 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </title>
+   <link REL="stylesheet" HREF="cse533.css">
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+</head>
+<body>
+&nbsp;
+<table CELLPADDING="10">
+<tr>
+<td class="title-white"><br>Network Programming<br><br></td>
+<td class="title-mov"><br>Assignment 4</td>
+</tr>
+</table>
+
+<p class="caution"><i>Last updated November 19</i>.</p>
+<p><big>Due Friday, December 5.</big> 
+<!--<br><b><font color="red">Please note that this is a <u>hard</u> deadline.</font> <u>No</u> extensions will be granted, period.</b> If your submission is not in on time, it simply will <u>not</u> be graded.</font>-->
+</p>
+
+<p><big>You are to work on this assignment in groups of two</big><!-- individually</big>, not in groups-->.</p>
+
+<!--<p>As I get feedback from students and realize that parts of this write-up&nbsp;
+need to be extended, corrected, and/or further clarified, I shall update
+the contents and the <i><font color="#FF00FF">Last Updated</font></i> date.
+Updated / modified parts will be in <b><font color="#3333FF">bold blue</font></b>
+for easy identification. Please check this web page periodically to make
+sure you have the latest version.</p>-->
+
+<p><hr>
+
+<h2>Overview</h2>
+
+<p>For this assignment you will be developing an application that uses raw <i>IP</i> sockets to &#8216;walk&#8217; around an ordered list of nodes (given as a command line argument at the &#8216;<i>source</i>&#8217; node, which is the node at which the tour was initiated), in a manner similar to the <i>IP SSRR</i> (Strict Source and Record Route) option. At each node, the application <i>ping</i>s the preceding node in the tour. However, unlike the <i>ping</i> code in <i>Stevens</i>, you will be sending the <i>ping ICMP echo request</i> messages through a <i>SOCK_RAW</i>-type <i>PF_PACKET</i> socket and implementing <i>ARP</i> functionality to find the <i>Ethernet</i> address of the target node. Finally, when the &#8216;walk&#8217 is completed, the group of nodes visited on the tour will exchange multicast messages. Your code will consist of two process modules, a &#8216;<i>Tour</i>&#8217; application module (which will implement all the functionality outlined above, except for <i>ARP</i> activity) and an <i>ARP</i> module.</p>
+
+<p>The following should prove to be useful reference material for the assignment:</p>
+<ul>
+<li>
+Sections 21.2, 21.3, 21.6 and 21.10, Chapter 21, on Multicasting.<br><br></li>
+
+<li>
+Sections 27.1 to 27.3, Chapter 27, on the <i>IP SSRR</i> option.<br><br></li>
+
+<li>
+Sections 28.1 to 28.5, Chapter 28, on raw sockets, the <i>IP_HDRINCL</i> socket option, and <i>ping</i>.<br><br></li>
+
+<li>Sections 15.5, Chapter 15, on <i>Unix</i> domain <i>SOCK_STREAM</i> sockets.<br><br></li>
+
+<li>
+Figure 29.14, &nbsp;<i>p</i>.&nbsp;807, and the corresponding explanation on &nbsp;<i>p</i>.&nbsp;806, on filling in an <i>IP</i> header when the <i>IP_HDRINCL</i> socket option is in effect.<br><br></li>
+
+<li>The Lecture Slides on&nbsp; <a target="_blank" href="http://www.cs.stonybrook.edu/~cse533/lecture_slides/ARP.pdf"><i>ARP</i> &amp; <i>RARP</i></a>&nbsp; (especially Section 4.4, <i>ARP Packet Format</i>, and the Figure 4.3 it includes).<br><br></li>
+
+<li>The link <a target="_blank" href="http://www.pdbuchan.com/rawsock/rawsock.html">http://www.pdbuchan.com/rawsock/rawsock.html</a> contains useful code samples that use IP raw sockets and PF_PACKET sockets. Note, in partcular, the code &#8220;icmp4_ll.c&#8221; in Table 2 for building an echo request sent through a PF_PACKET SOCK_RAW socket. <br><br></li>
+</ul>
+
+<h2>The &nbsp;<i>VMware</i>&nbsp; environment</h2>
+
+<p>You will be using the same <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> nodes you used for Assignment&nbsp;3. However, unlike Assignment&nbsp;3, you should use only interfaces <i>eth0</i> and their associated <i>IP</i> addresses and ignore the other <i>Ethernet</i> interfaces that nodes have (interfaces <i>eth0</i> make <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> look as if they belong to the same <i>Ethernet LAN</i> segment <i>IP</i> network 130.245.156.0/24). Note that, apart from the primary <i>IP</i> addresses associated with interfaces <i>eth0</i>, some nodes might also have one or more alias <i>IP</i> addresses associated with their interface <i>eth0</i>.</p><br>
+
+<h2>Tour application module specifications</h2>
+
+<ol>
+<li>
+The application will create a total of four sockets: two <i>IP</i> raw sockets, a <i>PF_PACKET</i> socket and a <i>UDP</i> socket for multicasting.<br><br>
+
+<ul>
+<li>We shall call the two <i>IP</i> raw sockets the &#8216;<i>rt</i>&nbsp;&#8217; (&#8216;route traversal&#8217;) and &#8216;<i>pg</i>&nbsp;&#8217; (&#8216;ping&#8217;) sockets, respectively. The <i>rt</i> socket should have the <i>IP_HDRINCL</i> option set. You will only be receiving <i>ICMP</i> <i>echo reply</i> messages through the <i>pg</i> socket (and not sending <i>echo request</i>s), so it does not matter whether it has the <i>IP_HDRINCL</i> option set or not.<br><br>
+The <i>pg</i> socket should have <i>protocol</i> value (<i>i.e.</i>, protocol demultiplexing key in the <i>IP</i> header) <i>IPPROTO_ICMP</i>.<br><br>
+The <i>rt</i> socket should have a <i>protocol</i> value that identifies the application - <i>i.e.</i>, some value other than the <i>IPPROTO_XXXX</i> values in &nbsp;<i>/usr/include/netinet/in.h</i>. However, remember that you will all be running your code using the same <i>root</i> account on the <i>vm1</i> , . . . . . , <i>vm10</i> nodes. So if two of you happen to choose the same <i>protocol</i> value and happen to be running on the same <i>vm</i> node at the same time, your applications will receive each other&#8217;s <i>IP</i> packets. For that reason, try to choose a <i>protocol</i> value for your <i>rt</i> socket that is likely to be unique to yourself.<br><br></li>
+
+<li>
+The <i>PF_PACKET</i> socket should be of type <i>SOCK_RAW</i> (<b>not</b> <i>SOCK_DGRAM</i>). This socket should have a <i>protocol</i> value of&nbsp; <i>ETH_P_IP</i> = 0x0800 (<i>IPv4</i>).<br><br></li>
+
+<li>
+The <i>UDP</i> socket for multicasting will be discussed below. <b>Note that, depending on how you choose to bind that socket, you might actually need to have <u>two</u> <i>UDP</i> sockets</b> for multicast communication &ndash; see bottom of&nbsp; <i>p</i>.&nbsp;576, Section 21.10.<br><br></li>
+</ul></li>
+
+<li>
+Your application will, of course, have to be running on every <i>vm</i> node that is included in the tour.<br><br>
+
+<ul>
+<li>
+When evoking the application on the source node, the user supplies a sequence of <i>vm</i> node names (<b>not</b> <i>IP</i> addresses) to be visited in order. This command line sequence starts with the next node to be visited from the <i>source</i> node (<i>i.e.</i>, it does not start with the <i>source</i> node itself). The sequence can include any number of repeated visits to the same node. For example, suppose that the source node is <i>vm3</i> and the executable is called <i>badr_tour</i> :<br><br>
+<small>[root@vm3/root]# badr_tour <i>vm2</i> <i>vm10</i> <i>vm4</i> <i>vm7</i> <i>vm5</i> <i>vm2</i> <i>vm6</i> <i>vm2</i> <i>vm9</i> <i>vm4</i> <i>vm7</i> <i>vm2</i> <i>vm6</i> <i>vm5</i> <i>vm1</i> <i>vm10</i> <i>vm8</i></small><br><br>
+(but note that the tour does not necessarily have to visit <b>every</b> <i>vm</i> node; and the same node should not appear consequentively in the tour list &ndash; <i>i.e.</i>, the next node on the tour cannot be the current node itself).<br><br></li>
+
+<li>
+The application turns the sequence into a list of <i>IP</i> addresses for source routing. It also adds the <i>IP</i> address of the <i>source</i> node itself to the beginning of the list. The list thus produced will be carried as the payload of an <i>IP</i> packet, <b>not</b> as a <i>SSRR</i> option in the packet header. It is our application which will ensure that every node in the sequence is visited in order, not the <i>IP SSRR</i> capability.<br><br></li>
+
+<li>
+The source node should also add to the list an <i>IP</i> multicast address and a port number of its choice. It should also join the multicast group at that address and port number on its <i>UDP</i> socket. The TTL for outgoing multicasts should be set to 1.<br><br></li>
+
+<li>
+The application then fills in the header of an <i>IP</i> packet, designating itself as the <i>IP</i> source, and the next node to be visited as the <i>IP</i> destination. The packet is sent out on the <i>rt</i> socket. Note that on <i>Linux</i>, all the fields of the packet header must be in network byte order (Stevens, Section 28.3, <i>p</i>.&nbsp;737, the fourth bullet point).<br><br></li>
+
+<li>
+When filling in the packet header, you should explicitly fill in the <i>identification</i> field (recall that, with the <i>IP_HDRINCL</i> socket option, if the <i>identification</i> field is given value 0, then the kernel will set its value). Try to make sure that the value you choose is likely to be unique to yourself (for reasons similar to those explained with respect to the <i>IPPROTO_XXXX</i> in 1. above).
+<br><br></li>
+</ul></li>
+
+<li> 
+When a node receives an <i>IP</i> packet on its <i>rt</i> socket, it should first check that the <i>identification</i> field carries the right value (this implies that you will hard code your choice of <i>identification</i> field value determined in item 2 above in your code). If the <i>identification</i> field value does not check out, the packet is ignored. For a valid packet&nbsp;:<br><br>
+
+<ul>
+<li>
+<b>Print out a message along the lines of:</b>
+<blockquote><blockquote><b>&lt;<i>time</i>&gt; &nbsp;&nbsp;received source routing packet from &lt;<i>hostname</i>&gt;</b></blockquote></blockquote>
+&lt;<i>time</i>&gt; is the current time in human-readable format (see lines 19 &amp; 20 in Figure 1.9, &nbsp;<i>p</i>. 14, and the corresponding explanation on &nbsp;<i>p</i>. 14<i>f</i>.), and &lt;<i>hostname</i>&gt; is the host name corresponding to the source <i>IP</i> address in the header of the received packet.<br><br></li>
+
+<li>
+If this is the first time the node is visited, the application should use the multicast address and port number in the packet received to join the multicast group on its <i>UDP</i> socket. The TTL for outgoing multicasts should be set to 1.<br><br></li>
+
+<li>
+The application updates the list in the payload, so that the next node in the tour can easily identify what the next hop from itself will be when it receives the packet. How you do this I leave up to you. You could, for example, include as part of the payload a pointer field into the list of nodes to be visited. This pointer would then be updated to the next entry in the list as the packet progresses hop by hop (see Figure 27.1 and the associated explanation on &nbsp;<i>pp</i>. 711-712). Other solutions are, of course, possible. The application then fills in a new <i>IP</i> header, designating itself as the <i>IP</i> source, and the next node to be visited as the <i>IP</i> destination. The <i>identification</i> field should be set to the same value as in the received packet. The packet is sent out on the <i>rt</i> socket.<br><br></li>
+
+<li>
+The node should also initiate <i>ping</i>ing to the preceding node in the tour (the <i>IP</i> address of which it should pick up from the header of the received packet). However, unlike the Stevens <i>ping</i> code, it will be using the <i>SOCK_RAW</i>-type <i>PF_PACKET</i> socket of item 1 above to send the <i>ICMP</i> <i>echo request</i> messages.<br><br>
+Before it can send <i>echo request</i> messages, the application has to call on the <i>ARP</i> module you will implement to get the <i>Ethernet</i> address of this preceding&nbsp;/&nbsp;&#8216;target&#8217; node; this call is made using the <i>API</i> function <i>areq</i> which you will also implement (see sections <i>ARP module specifications</i> &amp; <i>API specifications</i> below). <b>Note that <i>ARP</i> has to be evoked <u>every</u> time the application wants to send out an <i>echo request</i> message, and not just the first time.</b><br><br>
+An <i>echo request</i> message has to be encapsulated in a properly-formulated <i>IP</i> packet, which is in turn encapsulated in a properly-formulated <i>Ethernet</i> frame transmitted out through the <i>PF_PACKET</i> socket&nbsp;;&nbsp; otherwise, <i>ICMP</i> at the <i>source</i> node will not receive it. You will have to modify Stevens&#8217; <i>ping</i> code accordingly, specifically, the <i>send_v4</i> function. In particular, the <i>Ethernet</i> frame must have a value of&nbsp; <i>ETH_P_IP</i> = 0x0800 (<i>IPv4</i>&nbsp;&ndash;&nbsp;see &lt;<i>linux/if_ether.h</i>&gt;) in the <i>frame type</i>&nbsp;/&nbsp;&#8216;<i>length</i>&#8217; field&nbsp;;&nbsp; and the encapsulated <i>IP</i> packet must have a value of&nbsp; <i>IPPROTO_ICMP</i> = 0x01 (<i>ICMPv4</i>&nbsp;&ndash;&nbsp;see &lt;<i>netinet_in.h</i>&gt;) in its <i>protocol</i> field.<br><br>
+<b>You should also simplify the <i>ping</i> code in its entirety by stripping all the &#8216;indirection&#8217; <i>IPv4</i>&nbsp;/&nbsp;<i>IPv6</i> dual-operability paraphernalia and making the code work just for <i>IPv4</i>. Also note that the functions <i>host_serv</i> and <i>freeaddrinfo</i>, together with the associated structure <i>addrinfo</i> (see Sections 11.6, 11.8 &amp; 11.11), in Figures 27.3, 27.6 &amp; 28.5 ( <i>pp</i>. 713, 716 &amp; 744<i>f</i>., respectively) can be replaced by the function <i>gethostbyname</i> and associated structure <i>hostent</i> (see Section 11.3) where needed. Also, there is no &#8216;-v&#8217; verbose option, so this too should be stripped from Stevens&#8217; code.</b><br><br> 
+When a node is ready to start <i>ping</i>ing, <b>it first prints out a &#8216;PING&#8217; message similar to lines 32-33 of Figure 28.5, &nbsp;<i>p</i>. 744</b>. It then builds up <i>ICMP echo request</i> messages and sends them to the <i>source</i> node every 1 second through the <i>PF_PACKET</i> socket. It also reads incoming <i>echo response</i> messages off the <i>pg</i> socket, in response to which <b>it prints out the same kind of output as the code of Figure 28.8, &nbsp;<i>p</i>. 748</b>.<br><br>
+<b>If this node and its preceding node have been previously visited in that order during the tour, then <i>ping</i>ing would have already been initiated from the one to the other in response to the first visit, and nothing further should nor need be done during second and subsequent visits.</b><br><br>
+In light of the above, note that once a  node initiates <i>ping</i>ing, it needs to read from both its <i>rt</i> and <i>pg</i> sockets, necessitating the use of the <i>select</i> function. As will be clear from what follows below, the application will anyway be needing also to simultaneously monitor its <i>UDP</i> socket for incoming multicast datagrams.<br><br></li>
+</ul></li>
+
+<li>
+When the last node on the tour is reached, and if this is the first time it is visited, it joins the multicast group and starts <i>ping</i>ing the preceding node (if it is not already doing so). After a few <i>echo replies</i> are received (five, say), it sends out the multicast message below on its <i>UDP</i> socket (<i>i.e.</i>, the node should wait about five seconds before sending the multicast message)&nbsp;:<br><br>
+<center>
+<b>&lt;&lt;&lt;&lt;&lt; This is node <i>vm<sub><sub>i</sub></sub></i>&nbsp;.&nbsp; Tour has ended&nbsp;.&nbsp; Group members please identify yourselves. &gt;&gt;&gt;&gt;&gt;</b>
+</center><br>
+where <i>vm<sub><sub>i</sub></sub></i> is the name (<b>not</b> <i>IP</i> address) of the node. <b>The node should also print this message out on <i>stdout</i> preceded, on the same line, by the phrase:</b><br><br>
+<center><b><i>Node <i>vm<sub><sub>i</sub></sub></i>&nbsp;.&nbsp; Sending:</i></b> &lt;then print out the message sent&gt;.</center>
+<blockquote>
+<ol type=a>
+<li>
+<b>Each node</b> <i>vm<sub><sub>j</sub></sub></i> receiving this message should <b>print out the message received preceded, on the same line, by the phrase:</b><br><br>
+<center><b><i>Node <i>vm<sub><sub>j</sub></sub></i>&nbsp;.&nbsp; Received</i></b> &lt;then print out the message received&gt;.</center><br></li>
+<li>
+<b>Each such node in step a above should then immediately stop its <i>ping</i>ing activity.</b><br><br></li>
+<li>
+The node should then send out the following multicast message:
+<blockquote><blockquote><b>&lt;&lt;&lt;&lt;&lt; Node <i>vm<sub><sub>j</sub></sub></i>&nbsp;.&nbsp; I am a member of the group. &gt;&gt;&gt;&gt;&gt;</b></blockquote></blockquote>
+<b>and print out this message preceded, on the same line, by the phrase:</b><br><br>
+<center><b><i>Node <i>vm<sub><sub>j</sub></sub></i>&nbsp;.&nbsp; Sending:</i></b> &lt;then print out the message sent&gt;.</center><br></li>
+<li>
+<b>Each node receiving these second multicast messages</b> (<i>i.e.</i>, the messages that nodes&nbsp;&ndash; including itself&nbsp;&ndash; sent out in step c above) <b>should print each such message out preceded, on the same line, by the phrase:</b><br><br>
+<center><b><i>Node <i>vm<sub><sub>k</sub></sub></i>&nbsp;.&nbsp; Received:</i></b> &lt;then print out the message received&gt;.</center><br></li>
+<li>
+Reading from the socket in step d above should be implemented with a 5-second timeout. When the timeout expires, the node should print out another message to the effect that it is terminating the <i>Tour</i> application, and gracefully exit its <i>Tour</i> process.<br><br></li>
+<li>
+Note that under Multicast specifications, the last node in the tour, which sends out the <i>End of Tour</i> message, should itself receive a copy of that message and, when it does, it should behave exactly as do the other nodes in steps a.&nbsp;&ndash;&nbsp;e. above.<br><br></li>
+</ol></blockquote></li>
+</ol>
+
+<h2>ARP module specifications</h2>
+
+<p>Your executable is evoked with no command line arguments. Like the <i>Tour</i> module, it will be running on every <i>vm</i> node.</p>
+
+<ol>
+<li>
+It uses the <i>get_hw_addrs</i> function of Assignment 3 to explore its node&#8217;s interfaces and build a set of &nbsp;&lt;<i>IP</i> address , <i>HW</i> address&gt;&nbsp; matching pairs for all <b><i>eth0</i></b> interface <i>IP</i> addresses (including alias <i>IP</i> addresses, if any).<br><br>
+<b>Write out to <i>stdout</i> in some appropriately clear format the address pairs found.</b><br><br></li>
+
+<li>
+The module creates two sockets: a <i>PF_PACKET</i> socket and a <i>Unix</i> domain socket.<br><br>
+
+<ul>
+<li>
+The <i>PF_PACKET</i> should be of type <i>SOCK_RAW</i> (<b>not</b> type <i>SOCK_DGRAM</i>) with a <i>protocol</i> value of your choice (but <b>not</b> one of the standard values defined in &lt;<i>linux/if_ether.h</i>&gt;) which is, hopefully, unique to yourself. This value effectively becomes the <i>protocol</i> value for your implementation of <i>ARP</i>. Because this <i>protocol</i> value will be carried in the <i>frame type</i>&nbsp;/&nbsp;&#8216;<i>length</i>&#8217; field of the <i>Ethernet</i> frame header (see Figure 4.3 of the <i>ARP</i> &amp; <i>RARP</i> handout), <b>the value chosen should be not less than 1536 (0x600)</b> so that it is not misinterpreted as the length of an <i>Ethernet 802.3</i> frame.<br><br></li>
+
+<li>
+The <i>Unix</i> domain socket should be of type <i>SOCK_STREAM</i> (<b>not</b> <i>SOCK_DGRAM</i>). It is a <b>listening</b> socket bound to a &#8216;well-known&#8217; <i>sun_path</i> file. This socket will be used to communicate with the function <i>areq</i> that is implemented in the <i>Tour</i> module (see the section <i>API specifications</i> below). In this context, <i>areq</i> will act as the client and the <i>ARP</i> module as the server.<br><br></li>
+</ul></li>
+
+<li>
+The <i>ARP</i> module then sits in an infinite loop, monitoring these two sockets.<br><br></li>
+
+<li>
+As <i>ARP</i> request messages arrive on the <i>PF_PACKET</i> socket, the module processes them, and responds with <i>ARP</i> reply messages as appropriate.<br><br>
+The protocol builds a &#8216;cache&#8217; of matching &nbsp;&lt;<i>IP</i> address , <i>HW</i> address&gt;&nbsp; pairs from the replies (and requests&nbsp;&ndash;&nbsp;see below) it receives. For simplicity, and unlike the real <i>ARP</i>, we shall not implement timing out mechanisms for these cache entries.<br><br>
+A cache entry has five parts: (i)&nbsp;<i>IP</i> address&nbsp;;&nbsp; (ii)&nbsp;<i>HW</i> address&nbsp;;&nbsp; (iii)&nbsp;<i>sll_ifindex</i> (the interface to be used for reaching the matching pair &lt;(i)&nbsp;,&nbsp;(ii)&gt;)&nbsp;;&nbsp; (iv)&nbsp;<i>sll_hatype</i>&nbsp;;&nbsp; and (v)&nbsp;a <i>Unix</i>-domain connection-socket descriptor for a connected client (see the section <i>API specifications</i> below for the latter three). When an <i>ARP</i> reply is being entered in the cache, the <i>ARP</i> module uses the socket descriptor in (v) to send a reply to the client, closes the connection socket, and deletes the socket descriptor from the cache entry.<br><br>
+Note that, like the real <i>ARP</i>, when an <i>ARP</i> request is received by a node, and if the request pertains to that receiving node, the <i>sender</i>&#8217;s (see Figure 4.3 of the <i>ARP</i> &amp; <i>RARP</i> handout)  &lt;<i>IP</i> address, <i>HW</i> address&gt; matching pair should be entered into the cache if it is not already there (together, of course, with (iii)&nbsp;<i>sll_ifindex</i>&nbsp;&amp;&nbsp; (iv)&nbsp;<i>sll_hatype</i>), or updated if need be if such an entry already exists in the cache.<br><br>
+If the <i>ARP</i> request received does <b>not</b> pertain to the node receiving it, but there is already an entry in that receiving node's cache for the <i>sender</i>&#8217;s &lt;<i>IP</i> address, <i>HW</i> address&gt; matching pair, that entry should be checked and updated if need be. If there is no such entry, no action is taken (in particular, and unlike the case above, <b>no new entry should be made in the receiving node's cache of the <i>sender</i>&#8217;s &lt;<i>IP</i> address, <i>HW</i> address&gt; matching pair if such an entry does not already exist</b>).<br><br></li>
+
+<li>
+<i>ARP</i> request and reply messages have the same format as Figure 4.3 of the <i>ARP</i> &amp; <i>RARP</i> handout, but with an extra 2-byte identification field added at the beginning which you fill with a value chosen so that it has a high probability of being unique to yourself. This value is to be echoed in the reply message, and helps to act as a further filter in case some other student happens to have fortuitously chosen the same value as yourself for the <i>protocol</i> parameter of the <i>ARP</i> <i>PF_PACKET</i>. Values in the fields of our <i>ARP</i> messages must be in network byte order. You might find the system header file &lt;<i>linux/if_arp.h</i>&gt; useful for manipulating <i>ARP</i> request and reply messages, but remember that our version of these messages have an extra two-byte field as mentioned above.<br><br></li>
+ 
+<li>
+<b>Your code should print out on <i>stdout</i>, in some appropriately clear format, the contents of the <u><i>Ethernet</i> frame header and <i>ARP</i> request message</u> you send</b>. As described in Section 4.4 of the <i>ARP</i> &amp; <i>RARP</i> handout, the node that responds to the request should, in its reply message, swap the two <i>sender</i> addresses with the two <i>target</i> addresses, as well as, of course, echo back the extra <i>identification</i> field sent with the request. <b>The protocol at this responding node should print out, in an appropriately clear format, both the request <u>frame</u> (header and <i>ARP</i> message) it receives and the reply <u>frame</u> it sends. Similarly, the node that sent the request should print out the reply <u>frame</u> it receives.</b> Finally, recall that the node issuing the request sends out a broadcast <i>Ethernet</i> frame, but the responding node replies with a unicast frame.<br><br></li>
+</ol>
+
+<h2>API specifications</h2>
+
+<ol>
+<li>
+The API is for communication between the <i>Tour</i> process and the <i>ARP</i> process. It consists of a single function, <i>areq</i>, implemented in the <i>Tour</i> module. <i>areq</i> is called by <i>send_v4</i> function of the application every time the latter want to send out an <i>ICMP</i> <i>echo request</i> message:
+<pre><code><b>int areq (struct sockaddr *IPaddr, socklen_t sockaddrlen, struct hwaddr *HWaddr);</b></code></pre>
+<i>IPaddr</i> contains the primary or alias <i>IP</i>address of a &#8216;target&#8217; node on the <i>LAN</i> for which the corresponding hardware address is being requested<!--, including an <i>IP</i> address for the very node at which the <i>Tour</i> and <i>ARP</i> modules are running-->.<br><br>
+<i>hwaddr</i> is a new structure (and not a pre-existing type) modeled on the <i>sockaddr_ll</i> of <i>PF_PACKET</i>; you will have to declare it in your code. It is used to return the requested hardware address to the caller of <i>areq</i>&nbsp;:
+<pre><code><b>
+structure hwaddr {
+		     int             sll_ifindex;	 /* Interface number */
+		     unsigned short  sll_hatype;	 /* Hardware type */
+		     unsigned char   sll_halen;		 /* Length of address */
+		     unsigned char   sll_addr[8];	 /* Physical layer address */
+};
+</b></code></pre></li>
+
+<li>
+<i>areq</i> creates a <i>Unix</i> domain socket of type <i>SOCK_STREAM</i> and connects to the &#8216;well-known&#8217; <i>sun_path</i> file of the <i>ARP</i> listening socket. It sends the <i>IP</i> address from parameter <i>IPaddr</i> and the information in the three fields of parameter <i>HWaddr</i> to <i>ARP</i>. It then blocks on a read awaiting a reply from <i>ARP</i>. This read should be backed up by a timeout since it is possible that no reply is received for the request. If a timeout occurs, <i>areq</i> should close the socket and return to its caller indicating failure (through its <i>int</i> return value).<br><br>
+<b>Your application code should print out on <i>stdout</i>, in some appropriately clear format, a notification every time <i>areq</i> is called, giving the <i>IP</i> address for which a <i>HW</i> address is being sought. It should similarly print out the result when the call to <i>areq</i> returns (<i>HW address</i> returned, or failure).</b><br><br></li>
+
+<li>
+When the <i>ARP</i> module receives a request for a <i>HW</i> address from <i>areq</i> through its <i>Unix</i> domain listening socket, it first checks if the required <i>HW</i> address is already in the cache. If so, it can respond immediately to the <i>areq</i> and close the <i>Unix</i> domain connection socket.&nbsp; Else&nbsp;:&nbsp; it makes an &#8216;incomplete&#8217; entry in the cache, consisting of parts (i), (iii), (iv) and (v)&nbsp;;&nbsp; puts out an <i>ARP</i> request message on the network on its <i>PF_PACKET</i> socket; and starts monitoring the <i>areq</i> connection socket for readability&nbsp;&nbsp;&ndash;&nbsp;&nbsp;if the <i>areq</i> client closes the connection socket (this would occur in response to a timeout in <i>areq</i>), <i>ARP</i> deletes the corresponding incomplete entry from the cache (and ignores any subsequent <i>ARP</i> reply from the network if such is received). On the other hand, if <i>ARP</i> receives a reply from the network, it updates the incomplete cache entry, responds to <i>areq</i>, and closes the connection socket.<br><br></li>
+</ol>
+
+<h2>Hand-in</h2>
+
+<p>Submit your code on the <i>minix</i> node using the &nbsp;<a target="_blank" href="handin4.html">electronic&nbsp;hand-in</a> &nbsp;procedure provided. Your submission must absolutely include&nbsp;:</p>
+
+<blockquote>
+a <i>Readme</i> file which identifies the members of the group;<br>
+</blockquote>
+<blockquote>
+a <i>Makefile</i> which
+<ul>
+<li>
+compiles your code using, where necessary, the Stevens&#8217; environment in the course account on the <i>minix</i> node, &nbsp;<i>/users/cse533/Stevens/unpv13e</i>&nbsp;; &nbsp;and<br><br></li>
+<li>
+<b>gives the standard names &lt;<i>login</i>&gt;_<i>tour</i>&nbsp; &amp;&nbsp; &lt;<i>login</i>&gt;_<i>arp</i> for the executables produced</b> (note the underscore in the executable names), where &lt;<i>login</i>&gt; is the login name your group will use to hand in its copy of the assignment.</li></ul>
+</blockquote>
+
+<p></p><hr><p></p>
+  <p>
+    <a href="http://validator.w3.org/check/referer"><img border="0"
+        src="http://www.w3.org/Icons/valid-html401"
+        alt="Valid HTML 4.01!" height="31" width="88"></a>
+    <a href="http://jigsaw.w3.org/css-validator/">
+       <img width="88" height="31" border="0"
+            src="http://jigsaw.w3.org/css-validator/images/vcss" 
+             alt="Valid CSS!"></a>
+  </p>
+
+</body>
+</html>

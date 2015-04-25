@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+   <title>Network Programming (CSE 533) | get_ifi_info modifications &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </title>
+   <link REL="stylesheet" HREF="cse533.css">
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+</head>
+<body>
+&nbsp;
+<table CELLPADDING=10 width="900">
+<tr>
+<td valign="middle" align="left" class="title-white"><br>Network Programming<br><br></td>
+
+<td valign="top" align="left" class="title-mov"><br><i>get_ifi_info</i> &amp; Related Modifications</td>
+</tr>
+</table>
+
+
+<p><font color="#3333FF">We have to modify the function <i>get_ifi_info</i> so that
+it also gets the network mask for the <i>IP</i> address it locates.</font></p>
+
+<p><font color="#3333FF">The complete modified code is available for you to copy, from
+directory </font><font color="#FF00FF"><b><i>~cse533/Asgn2_code</i></b></font><font color="#3333FF">.
+Make sure you read the <i>README</i> file there to understand how function and file names have
+been changed, typically by adding &#8216;<i>_plus</i>&#8217; to their original name. For example, the modified
+<i>get_ifi_info</i> function is called <i>get_ifi_info_plus</i>, and so on.</font></p>
+<p><hr>
+
+<p><font color="#3333FF"><i>get_ifi_info</i> builds a linked list of <i>ifi_info</i>
+structures in which it copies the information it obtains. The first step then is to add an extra
+field to the <i>ifi_info</i> structure, in which to store the network mask. The <i>ifi_info</i>
+structure is defined in file <i>ioctl/unpifi.h</i> (Figure 17.5, <i>p</i>.471). The
+modifications needed are shown below. (The line numbers shown refer to Figure 17.5 so that you
+can see exactly where the new code needs to be introduced.).</font>
+</p>
+<pre>
+
+ 9 struct ifi_info {
+10     char    ifi_name[IFI_NAME]; /* interface name, null terminated */
+11     short   ifi_index;			/* interface index */
+12     short   ifi_mtu;				/* interface MTU */
+13     u_char  ifi_haddr[IFI_HADDR];   /* hardware address */
+14     u_short ifi_hlen;           /* #bytes in hardware address: 0, 6, 8 */
+15     short   ifi_flags;          /* IFF_xxx constants from &lt;net/if.h&gt; */
+16     short   ifi_myflags;        /* our own IFI_xxx flags */
+17     struct sockaddr  *ifi_addr; /* primary address */
+18     struct sockaddr  *ifi_brdaddr;  /* broadcast address */
+19     struct sockaddr  *ifi_dstaddr;  /* destination address */
+
+/*================ cse 533 Assignment 2 modifications =================*/
+
+       struct sockaddr  *ifi_ntmaddr;  /* netmask address */
+
+/*=====================================================================*/
+
+20     struct ifi_info  *ifi_next;	/* next of these structures */
+21 };
+
+</pre>
+<hr>
+<p><font color="#3333FF">The next step is to modify <i>get_ifi_info</i> itself so that
+it calls <i>ioctl</i> to obtain the network mask and put it in the <i>ifi_info</i> structure.
+The changes are shown below (<i>cf.</i> Figure 17.10, <i>p</i>.479).</font>
+</p>
+<pre>
+
+117                     ifi->ifi_dstaddr = Calloc(1, sizeof(struct sockaddr_in));
+118                     memcpy(ifi->ifi_dstaddr, sinptr, sizeof(struct sockaddr_in));
+119                }
+120 #endif
+
+/*================== cse 533  Assignment 2 modifications ====================*/
+
+   #ifdef  SIOCGIFNETMASK
+		   Ioctl(sockfd, SIOCGIFNETMASK, &amp;ifrcopy);
+                   sinptr = (struct sockaddr_in *) &amp;ifrcopy.ifr_addr;
+                   ifi->ifi_ntmaddr = Calloc(1, sizeof(struct sockaddr_in));
+                   memcpy(ifi->ifi_ntmaddr, sinptr, sizeof(struct sockaddr_in));
+   #endif
+
+/*===========================================================================*/
+
+121           break;
+
+</pre>
+<hr>
+<p><font color="#3333FF">To test that our modifications work, we use the
+<i>prifinfo</i> program to print out the information gathered by
+<i>get_ifi_info</i> in the linked list of <i>ifi_info</i> structures. But
+first, we must modifiy <i>prifinfo</i> (<i>cf</i>. Figure 17.6, <i>p</i>.472)
+so that it also prints out the new network mask field we introduced into the
+<i>ifi_info</i> structure above.</font>
+</p>
+<pre>
+
+39		if ( (sa = ifi->ifi_addr) != NULL)
+40			printf("  IP addr: %s\n", Sock_ntop_host(sa, sizeof(*sa)));
+
+/*=================== cse 533 Assignment 2 modifications ======================*/
+
+		if ( (sa = ifi->ifi_ntmaddr) != NULL)
+			printf("  network mask: %s\n",
+						Sock_ntop_host(sa, sizeof(*sa)));
+
+/*=============================================================================*/
+
+41		if ( (sa = ifi->ifi_brdaddr) != NULL)
+42			printf("  broadcast addr: %s\n",
+43						Sock_ntop_host(sa, sizeof(*sa)));
+
+</pre>
+<hr>
+<p><font color="#3333FF">Finally, <i>prifinfo</i> calls function <i>free_ifi_info</i>
+which must also be slightly modified (<i>cf</i>. Figure 17.11, <i>p</i>.480) to ensure
+it also frees the socket address structures, pointed to from the structures <i>ifi_info</i>,
+in which the network masks are stored.</font></p>
+<pre>
+
+152		if (ifi->ifi_dstaddr != NULL)
+153			free(ifi->ifi_dstaddr);
+
+/*============ cse 533 Assignment 2 modifications =============*/
+
+		if (ifi->ifi_ntmaddr != NULL)
+			free(ifi->ifi_ntmaddr);
+
+/*=============================================================*/
+
+154		ifinext = ifi->ifi_next;   /* can't fetch ifi_next after free() */
+155		free(ifi);
+
+</pre>
+
+<p></p><hr><p></p>
+  <p>
+    <a href="http://validator.w3.org/check/referer"><img border="0"
+        src="http://www.w3.org/Icons/valid-html401"
+        alt="Valid HTML 4.01!" height="31" width="88"></a>
+    <a href="http://jigsaw.w3.org/css-validator/check/referer">
+       <img style="border:0;width:88px;height:31px"
+             src="http://jigsaw.w3.org/css-validator/images/vcss"
+             alt="Valid CSS!"></a>
+  </p>
+
+</body>
+</html>

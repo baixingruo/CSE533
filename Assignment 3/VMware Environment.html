@@ -1,0 +1,157 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+   <title>Network Programming (CSE 533) | CSE 533 VMware Environment &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </title>
+   <link REL="stylesheet" HREF="cse533.css">
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+</head>
+<body>
+&nbsp;
+<table CELLPADDING=10 >
+<tr>
+<td ALIGN=LEFT VALIGN=TOP class="title-white"><br>Network Programming<br><br></td>
+
+<td ALIGN=RIGHT VALIGN=BOTTOM class="title-mov">
+CSE 533 <i>VMware</i> Environment</td>
+</tr>
+</table>
+<br><br>
+<p>In order to work on your CSE 533 project you need to do the
+following:</p>
+<br>
+<p><b>A. Set up your Environment</b></p>
+<pre>
+ 1) ssh to minix.cs.stonybrook.edu and logon with your department username
+     and password, as you would on the compserv and compute nodes.
+
+ 2) mkdir .ssh (if it does not already exist)
+
+ 3) chmod 700 .ssh
+
+ 4) cd .ssh
+
+ 5) cp /users/cse533/Fall2014/ssh/id_rsa .
+
+ 6) chmod 700 id_rsa
+
+ 7) cd ..
+
+ 8) mkdir cse533
+
+ 9) cd cse533
+
+10) cp -p /users/cse533/Fall2014/*_vms .
+
+11) cp -p /users/cse533/Fall2014/*_app .
+
+12) cp -p /users/cse533/Fall2014/kill_apps .
+
+13) cp -p /users/cse533/Fall2014/rm_file .
+
+14) ./setup_vms (answer "yes" as needed to coninue connecting)
+
+    Note: If this is the first time you are connecting to the VMs then you will need to
+	  answer <span style="color:#f00;">yes</span> to questions of the following form for each of the ten vm machines:
+
+		vmN The authenticity of host 'vmNN (130.245.156.NN)' can't be established.
+		ECDSA key fingerprint is 63:84:03:ca:6a:aa:d5:b6:46:fc:ac:de:dc:a5:63:ae.
+		Are you sure you want to continue connecting (yes/no)? <span style="color:#f00;">yes</span>
+		Warning: Permanently added 'vmN,130.245.156.NN' (ECDSA) to the list of known hosts.
+</pre>
+<br>
+<p><b>B. Work on your Assignment</b></p>
+<pre>
+You are now ready to begin your CSE 533 project.
+
+
+Do all of your code writing and compiling in your home directory on
+minix.  The VMs are shared among the entire class and so your assignments
+are not protected there as they are in your own home directory on minix.
+Therefore you should not keep any source code or other assignment related 
+files on the VMs except for compiled applications.
+
+
+Once your code is compiled you can use the scripts below to deploy and run your assignment.
+
+Note that executing the setup_vms script (Part A, step 14 above) should have created a subdirectory
+called &lt;username&gt; in the /home directory on each of the ten VMs.
+&lt;username&gt; is the login name you use to log into minix (thus, in my case for example, /home/badr).
+
+ 1) ~/cse533/<span style="color:#f00;">deploy_app</span> &lt;list of files needed to run your project&gt;
+      Copies the named files to your /home/&lt;username&gt; subdirectories on all ten VMs.
+      Note: This script does not copy directories.
+
+ 2) ~/cse533/<span style="color:#f00;">start_app</span> &lt;application name&gt;
+      Starts execution of  the named application (assumed to be located in your
+      /home/&lt;username&gt; subdirectories) on all ten VMs.
+
+Apart from <span style="color:#f00;">deploy_app</span> and <span style="color:#f00;">start_app</span>, there are three other scripts available to you:
+
+ 3) ~/cse533/<span style="color:#f00;">rm_file</span> &lt;file name&gt;
+      will delete the named file from your /home/&lt;username&gt; subdirectories on all ten VMs.
+      It can only remove one file per evocation.
+
+ 4) ~/cse533/<span style="color:#f00;">cleanup_vms</span>
+      will delete your entire /home/&lt;username&gt; subdirectory on all ten VMs.
+
+ 5) ~/cse533/<span style="color:#f00;">kill_apps</span>
+      will kill your running apps on all ten VMs.
+
+      So as not to bog down the VMs, you should indeed make sure to kill off all your running
+      applications when you are finished testing them. Another way to do this is to use the command:
+
+		killall -s TERM ssh
+
+      though you might find that that the <span style="color:#f00;">kill_apps</span> script works somewhat better than this killall command.
+</pre>
+<br>
+<p><b>C. Use of Individual VMs</b></p>
+<pre>
+If you wish to access a VM from minix, the command to use in the minix window is:
+
+	 ssh root@vmN
+
+where N is a number in the range of 1 to 10. You should not be prompted for a password.
+If you are asked for a password, go back to section A and redo the setup and copy of ssh/id_rsa.
+
+On login you will be in the /root directory.
+Change directories into /home/&lt;username&gt;, where &lt;username&gt; is your minix login name.
+If there is no such directory, go back to section A and redo the setup_vms script.
+
+
+An alternative way to access the VMs from minix is to use the command:
+
+	 ssh vmN
+
+In this case, you will be prompted for a password, which should be the same password you used
+to ssh into minix.
+But note that, here, you are logging into the VM as yourself (<i>i.e.</i>, as user &lt;username&gt;)
+and not as &#8220;root&#8221;.
+
+
+You can, if needed, use scp or sftp to move files back and forth between minix and the VMs. 
+However, keep in mind that your files are not protected when on the VM, and any other user
+has full access to them.
+</pre>
+<br>
+<p><b>D.	Problems or Questions</b></p>
+<p>If you encounter problems or have questions about the correct functioning of the<br>
+VMware system, please send me an email at&nbsp; <a href="http://www.cs.sunysb.edu/cgi-bin/nomail.cgi/vmware/0/2">badr&nbsp;AT&nbsp;cs&nbsp;dot&nbsp;stonybrook&nbsp;dot&nbsp;edu</a>&nbsp;.<br>
+I will then follow up with the system staff as needed.<br>
+
+<br>
+</p>
+<p></p><hr><p></p>
+  <p>
+    <a href="http://validator.w3.org/check/referer"><img border="0"
+        src="http://www.w3.org/Icons/valid-html401"
+        alt="Valid HTML 4.01!" height="31" width="88"></a>
+    <a href="http://jigsaw.w3.org/css-validator/check/referer">
+       <img style="border:0;width:88px;height:31px"
+             src="http://jigsaw.w3.org/css-validator/images/vcss"
+             alt="Valid CSS!"></a>
+  </p>
+
+</body>
+</html>
+

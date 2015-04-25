@@ -1,0 +1,313 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html>
+<head>
+
+   <title>Network Programming (CSE 533) | Assignment 3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </title>
+
+   <link REL="stylesheet" HREF="cse533.css">
+
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+
+</head>
+
+<body>
+&nbsp;
+<table CELLPADDING="10">
+<tr>
+<td class="title-white"><br>Network Programming<br><br></td>
+<td class="title-mov"><br>Assignment 3</td>
+</tr>
+
+</table>
+
+
+<p class="caution"><i>Last updated November 7.</i></p>
+
+<p><big>Due Friday, November 21.</big></p>
+
+<p><big>You are to work on this assignment in groups of two</big>.</p>
+
+<!--<p>As I get feedback from students and realize that parts of this write-up&nbsp;
+need to be extended, corrected, and/or further clarified, I shall update
+the contents and the <i><font color="#FF00FF">Last Updated</font></i> date.
+Updated / modified parts will be in <b><font color="#3333FF">bold blue</font></b>
+for easy identification. Please check this web page periodically to make
+sure you have the latest version.</p>-->
+
+<p><hr>
+
+<h2>Overview</h2>
+
+<p>For this assignment you will be developing and implementing&nbsp;:</p>
+<ul>
+<li>An <b>O</b>n-<b>D</b>emand shortest-hop <b>R</b>outing (<i>ODR</i>) protocol for networks of fixed but arbitrary and unknown connectivity, using <i>PF_PACKET</i> sockets. The implementation is based on (a simplified version of) the <i>AODV</i> algorithm.<br><br></li>
+<li>Time client and server applications that send requests and replies to each other across the network using <i>ODR</i>. An <i>API</i> you will implement using <i>Unix</i> domain datagram sockets enables applications to communicate with the <i>ODR</i> mechanism running locally at their nodes.</li>
+</ul>
+
+<p>I shall be discussing the assignment in class on Wednesday, October 29, and Monday, November 3.</p> 
+
+<p>The following should prove useful reference material for the assignment&nbsp;:</p>
+
+<ul>
+<li>Sections 15.1, 15.2, 15.4 &amp; 15.6, Chapter 15, on <i>Unix</i> domain datagram sockets.<br><br></li>
+<li><a target="_blank" href="http://www.cs.stonybrook.edu/~cse533/lecture_slides/PF_PACKET(7).pdf">PF_PACKET(7)</a> from the <i>Linux</i> manual pages.
+<blockquote>You might find these <a target="_blank" href="PF_Packet_Useful_Link.pdf"> notes</a> made by a past CSE 533 student useful.</blockquote>
+<blockquote>Also, the following link <a target="_blank" href="http://www.pdbuchan.com/rawsock/rawsock.html">http://www.pdbuchan.com/rawsock/rawsock.html</a> contains useful code samples that use PF_PACKET sockets (as well as other code samples that use raw IP sockets which you do not need for this assignment, though you will be using these types of sockets for Assignment 4).</blockquote></li>
+<li>Charles E. Perkins &amp; Elizabeth M. Royer. <font color="#9933ff">&#8220;</font><a target="_blank" href="http://www.cs.stonybrook.edu/~cse533/lecture_slides/aodv.pdf"><i>Ad-hoc On-Demand Distance Vector Routing</i>.</a><font color="#9933ff">&#8221;</font> Proceedings of the 2nd <i>IEEE</i> Workshop on Mobile Computing Systems and Applications, New Orleans, Louisiana, February 1999,&nbsp; <i>pp</i>.&nbsp;90&nbsp;-&nbsp;100.<br><br></li>
+</ul>
+
+<h2>The &nbsp;<i>VMware</i>&nbsp; environment</h2>
+
+<p><i>minix.cs.stonybrook.edu</i> is a <i>Linux</i> box running <i>VMware</i>. A cluster of ten <i>Linux</i> virtual machines, called <i>vm1</i> through <i> vm10</i>, on which you can gain access as <i>root</i> and run your code have been created on <i>minix</i>. See <a target="_blank" href=hosts.html><i>VMware</i> Environment Hosts</a> for further details.</p>
+
+<p><a target="_blank" href=vmware.html><i>VMware</i> instructions</a>&nbsp; takes you to a page that explains how to use the system. The ten virtual machines have been configured into a small virtual <i>intranet</i> of <i>Ethernet</i> <i>LAN</i>s whose topology is (in principle) unknown to you.</p>
+
+<p>There is a course account <i>cse533</i> on node <i>minix</i>, with home directory <i>/users/cse533</i>. In there, you will find a subdirectory <i>Stevens/unpv13e</i>&nbsp;, exactly as you are used to having on the <i>cs</i> system. You should develop your source code and <i>makefile</i>s for handing in accordingly. You will be&nbsp; <a href="asgn3.html#handin">handing in</a>&nbsp; your source code on the <i>minix</i> node.</p>
+
+<p>Note that you do not need to link against the socket library (-<i>lsocket</i>) in <i>Linux</i>. The same is true for -<i>lnsl</i> and -<i>lresolv</i>. For example, take a look at how the <i>LIBS</i> variable is defined for Solaris, in<br>
+<i>/home/courses/cse533/Stevens/unpv13e_solaris2.10/Make.defines</i> (on <i>compserv1</i>, say)&nbsp;:<br><br>
+
+LIBS = ../libunp.a -lresolv -lsocket -lnsl -lpthread<br><br>
+
+But if you take a look at <i>Make.defines</i> on <i>minix</i><br>
+(<i>/users/cse533/Stevens/unpv13e/Make.defines</i>) you will find only:<br><br>
+
+LIBS = ../libunp.a -lpthread</p>
+
+<p>The nodes <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> are all multihomed&nbsp;:&nbsp; each has two (or more) interfaces. <b>The interface&nbsp; &#8216;<i>eth0</i>&nbsp;&#8217;&nbsp; should be completely ignored and is not to be used for this assignment</b> (because it shows all ten nodes as if belonging to the same single <i>Ethernet</i> 192.168.1.0/24, rather than to an <i>intranet</i> composed of several <i>Ethernet</i>s).</p>
+
+<p>Note that <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> are virtual machines, not real ones. One implication of this is that you will not be able to find out what their (virtual) <i>IP</i> addresses are by using <i>nslookup</i> and such. To find out these <i>IP</i> addresses, you need to look at the file <i>/etc/hosts</i> on <i>minix</i>. More to the point, invoking <i>gethostbyname</i> for a given <i>vm</i> will return to you only the (primary) <i>IP</i> address associated with the interface <i>eth0</i> of that <i>vm</i> (which is the interface you will not be using). It will not return to you any  other <i>IP</i> address for the node. Similarly, <i>gethostbyaddr</i> will return the <i>vm</i> node name only if you give it the (primary) <i>IP</i> address associated with the interface <i>eth0</i> for the node. It will return nothing if you give it any other <i>IP</i> address for the node, even though the address is perfectly valid. Because of this, and because it will ease your task to be able to use <i>gethostbyname</i> and <i>gethostbyaddr</i> in a straightforward way, we shall adopt the (primary) <i>IP</i> addresses associated with interfaces <i>eth0</i> as the &#8216;canonical&#8217; <i>IP</i> addresses for the nodes (more on this below).</p>
+
+<h2>Time client and server</h2>
+
+<p>A time server runs on each of the ten <i>vm</i> machines. The client code should also be available on each <i>vm</i> so that it can be evoked at any of them.</p>
+
+<p>Normally, time clients/servers exchange request/reply messages using the <i>TCP</i>/<i>UDP</i> socket <i>API</i> that, effectively, enables them to receive service (indirectly, via the transport layer) from the local <i>IP</i> mechanism running at their nodes. You are to implement an <i>API</i> using <i>Unix</i> domain sockets to access the local <i>ODR</i> service directly (somewhat similar, in effect, to the way that raw sockets permit an application to access <i>IP</i> directly). Use <i>Unix</i> domain <b><i>SOCK_DGRAM</i></b>, rather than <i>SOCK_STREAM</i>, sockets (see Figures 15.5&nbsp;&amp;&nbsp;15.6, <i>pp</i>.&nbsp;418&nbsp;-&nbsp;419).</p>
+
+<blockquote>
+
+<h3><i>API</i></h3>
+
+You need to implement a <i>msg_send</i> function that will be called by clients/servers to send requests/replies. The parameters of the function consist of&nbsp;:
+<ul>
+<li><i>int</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; giving the socket descriptor for write</li>
+<li><i>char</i>*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;giving the &#8216;canonical&#8217; <i>IP</i> address for the destination node, in presentation format</li>
+<li> <i>int</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; giving the destination &#8216;port&#8217; number</li>
+<li><i>char</i>*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;giving message to be sent</li>
+<li><i>int flag</i> &nbsp;if set, force a route rediscovery to the destination node even if a non-&#8216;stale&#8217; route already exists (see below)
+</ul>
+
+<i>msg_send</i> will format these parameters into a single <i>char</i> sequence which is written to the <i>Unix</i> domain socket that a client/server process creates. The sequence will be read by the local <i>ODR</i> from a <i>Unix</i> domain socket that the <i>ODR</i> process creates for itself.<br><br>
+
+Recall that the &#8216;canonical&#8217; <i>IP</i> address for a <i>vm</i> node is the (primary) <i>IP</i> address associated with the <i>eth0</i> interface for the node. It is what will be returned to you by a call to <i>gethostbyname</i>.<br><br>
+
+Similarly, we need a <i>msg_recv</i> function which will do a (blocking) read on the application domain socket and return with&nbsp;:
+
+<ul>
+<li><i>int</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; giving socket descriptor for read</li>
+<li><i>char</i>*&nbsp; giving message received</li>
+<li><i>char</i>*&nbsp; giving &#8216;canonical&#8217; <i>IP</i> address for the source node of message, in presentation format</li>
+<li> <i>int</i>*&nbsp;&nbsp;&nbsp;&nbsp; giving source &#8216;port&#8217; number</li>
+</ul>
+
+This information is written as a single <i>char</i> sequence by the <i>ODR</i> process to the domain socket that it creates for itself. It is read by <i>msg_recv</i> from the domain socket the client/server process creates, decomposed into the three components above, and returned to the caller of <i>msg_recv</i>.<br><br>
+Also see the section below entitled <i>ODR and the API</i>.
+
+<h3>Client</h3>
+
+When a client is evoked at a node, it creates a domain datagram socket.
+<blockquote>
+The client should bind its socket to a &#8216;temporary&#8217; (<i>i.e.</i>, not &#8216;well-known&#8217;) <i>sun_path</i> name obtained from a call to <i>tmpnam</i>() (<i>cf</i>. line&nbsp;10, Figure&nbsp;15.6, <i>p</i>.&nbsp;419) so that multiple clients may run at the same node.<br><br>
+Note that <i>tmpnam</i>() is actually highly deprecated. You should use the <i>mkstemp</i>() function instead - look up the online man pages on <i>minix</i> (&#8216;man mkstemp&#8217;) for details. <br><br>
+As you run client code again and again during the development stage, the temporary files created by the calls to <i>tmpnam</i>&nbsp;/&nbsp;<i>mkstemp</i> start to proliferate since these files are not automatically removed when the client code terminates. You need to explicitly remove the file created by the client evocation by issuing a call to <i>unlink</i>() or to <i>remove</i>() in your client code just before the client code exits. See the online man pages on <i>minix</i> (&#8216;man unlink&#8217;, &#8216;man remove&#8217;) for details.
+</blockquote>
+
+The client then enters an infinite loop repeating the steps below.
+
+<ol>
+<li>The client prompts the user to choose one of <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> as a server node.<br><br></li>
+<li>Client <i>msg_send</i>s a 1 or 2 byte message to server and prints out on <i>stdout</i> the message<br>
+<font face="arial">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;client at node&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp; sending request to server at&nbsp; vm&nbsp;<i>i<sub>2</sub></i></font><br>
+<b>(In general, throughout this assignment, &#8220;trace&#8221; messages such as the one above should give the <i>vm</i> names and not <i>IP</i> addresses of the nodes.)</b><br><br></li>
+<li>Client then blocks in <i>msg_recv</i> awaiting response. This attempt to read from the domain socket should be backed up by a timeout in case no response ever comes. I leave it up to you whether you &#8216;wrap&#8217; the call to <i>msg_recv</i> in a timeout, or you implement the timeout inside <i>msg_recv</i> itself.<br>
+When the client receives a response it prints out on <i>stdout</i> the message<br>
+<font face="arial">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;client at node&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp;: received from &nbsp; vm&nbsp;<i>i<sub>2</sub></i>&nbsp; &lt;timestamp&gt;</font><br>
+If, on the other hand, the client times out, it should print out the message<br>
+<font face="arial">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;client at node&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp;: timeout on response from  &nbsp; vm&nbsp;<i>i<sub>2</sub></i></font><br>
+The client then retransmits the message out, setting the <i>flag</i> parameter in <i>msg_send</i> to force a route rediscovery, and prints out an appropriate message on <i>stdout</i>. This is done only once, when a timeout for a given message to the server occurs for the first time.<br><br></li>
+<li>Client repeats steps&nbsp;1.&nbsp;-&nbsp;3.</li>
+</ol>
+
+<h3>Server</h3>
+
+The server creates a domain datagram socket. The server socket is assumed to have a (node-local) &#8216;well-known&#8217; <i>sun_path</i> name which it <i>bind</i>s to. This &#8216;well-known&#8217; <i>sun_path</i> name is designated by a (network-wide) &#8216;well-known&#8217; &#8216;port&#8217; value. The time client uses this &#8216;port&#8217; value to communicate with the server.<br><br>
+
+The server enters an infinite sequence of calls to <i>msg_recv</i> followed by <i>msg_send</i>, awaiting client requests and responding to them. When it responds to a client request, it prints out on <i>stdout</i> the message<br>
+<font face="arial">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;server at node&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp; responding to request from&nbsp; vm&nbsp;<i>i<sub>2</sub></i></font>
+
+</blockquote>
+
+<h2><i>ODR</i></h2>
+
+<p>The <i>ODR</i> process runs on each of the ten <i>vm</i> machines. It is evoked with a single command line argument which gives a &#8220;<i>staleness</i>&#8221; time parameter, in seconds.</p>
+
+<ul>
+<li>It uses <i>get_hw_addrs</i> (available to you on <i>minix</i> in ~cse533/Asgn3_code) to obtain the index, and associated (unicast) <i>IP</i> and <i>Ethernet</i> addresses for each of the node&#8217;s interfaces, except for the  <i>eth0</i> and <i>lo</i> (loopback) interfaces, which should be ignored.
+<blockquote>
+In the subdirectory <i>~cse533/Asgn3_code</i> (<i>/users/cse533/Asgn3_code</i>) on <i>minix</i> I am providing you with two functions, <i>get_hw_addrs</i> and <i>prhwaddrs</i>. These are analogous to the <i>get_ifi_info_plus</i> and <i>prifinfo_plus</i> of Assignment 2. Like <i>get_ifi_info_plus</i>, <i>get_hw_addrs</i> uses <i>ioctl</i>. <i>get_hw_addrs</i> gets the (primary) <i>IP</i> address, alias <i>IP</i> addresses (if any), <i>HW</i> address, and interface name and index value for each of the node's interfaces (including the loopback interface <i>lo</i>). <i>prhwaddrs</i> prints that information out. You should modify and use these functions as needed.<br><br>
+Note that if an interface has no <i>HW</i> address associated with it (this is, typically, the case for the loopback interface <i>lo</i> for example), then <i>ioctl</i> returns <i>get_hw_addrs</i> a <i>HW</i> address which is the equivalent of 00:00:00:00:00:00&nbsp;.&nbsp; <i>get_hw_addrs</i> stores this in the appropriate field of its data structures as it would with any <i>HW</i> address returned by <i>ioctl</i>, but when <i>prhwaddrs</i> comes across such an address, it prints a blank line instead of its usual &#8216;<i>HWaddr</i> = <i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>&#8217;.
+</blockquote></li>
+<li>The <i>ODR</i> process creates one or more <i>PF_PACKET</i> sockets.
+<blockquote>
+You will need to try out <i>PF_PACKET</i> sockets for yourselves and familiarize yourselves with how they behave. If, when you read from the socket and provide a <i>sockaddr_ll</i> structure, the kernel returns to you the index of the interface on which the incoming frame was received, then one socket will be enough. Otherwise, somewhat in the manner of Assignment 2, you shall have to create a <i>PF_PACKET</i> socket for every interface of interest (which are all the interfaces of the node, excluding interfaces <i>lo</i> and <i>eth0</i>&nbsp;), and <i>bind</i> a socket to each interface. Furthermore, if the kernel also returns to you the source <i>Ethernet</i> address of the frame in the <i>sockaddr_ll</i> structure, then you can make do with <i>SOCK_DGRAM</i> type <i>PF_PACKET</i> sockets; otherwise you shall have to use <i>SOCK_RAW</i> type sockets (although I would prefer you to use <i>SOCK_RAW</i> type sockets anyway, even if it turns out you can make do with <i>SOCK_DGRAM</i> type).<br><br>
+
+The socket(s) should have a <i>protocol</i> value (no larger than 0xffff so that it fits in two bytes; this value is given as a network-byte-order parameter in the call(s) to function <i>socket</i>) that identifies your <i>ODR</i> protocol. The <<i>linux/if_ether.h</i>> include file (<i>i.e.</i>, the file <i>/usr/include/linux/if_ether.h</i>) contains 
+<i>protocol</i> values defined for the standard protocols typically found on an <i>Ethernet LAN</i>, as well as 
+other values such as <i>ETH_P_ALL</i>. You should set <i>protocol</i> to a value of your choice which is <b>not</b> a <<i>linux/if_ether.h</i>> value, but which is, hopefully, unique to yourself. Remember that you will all be running your code using the same <i>root</i> account on the <i>vm1</i>&nbsp;,&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;.&nbsp;,&nbsp;<i>vm10</i> nodes. So if two of you happen to choose the same <i>protocol</i> value and happen to be running on the same <i>vm</i> node at the same time, your applications will receive each other&#8217;s frames. For that reason, try to choose a <i>protocol</i> value for the socket(s) that is likely to be unique to yourself (something based on your Stony Brook student ID number, for example). This value effectively becomes the <i>protocol</i> value for your implementation of <i>ODR</i>, as opposed to some other <i>cse 533</i> student's implementation. Because your value of <i>protocol</i> is to be carried in the <i>frame type</i> field of the <i>Ethernet</i> frame header, <b>the value chosen should be not less than 1536 (0x600)</b> so that it is not misinterpreted as the length of an <i>Ethernet 802.3</i> frame.<br><br>
+Note from the man pages for <i>packet</i>(7) that frames are passed to and from the socket without any processing in the frame content by the device driver on the other side of the socket, except for calculating and tagging on the 4-byte <i>CRC</i> trailer for outgoing frames, and stripping that trailer before delivering incoming frames to the socket. Nevertheless, if you write a frame that is less than 60 bytes, the necessary padding is automatically added by the device driver so that the frame that is actually transmitted out is the minimum <i>Ethernet</i> size of 64 bytes. When reading from the socket, however, any such padding that was introduced into a short frame at the sending node to bring it up to the minimum frame size is <b>not</b> stripped off - it is included in what you receive from the socket (thus, the minimum number of bytes you receive should never be less than 60). Also, you will have to build the frame header for outgoing frames yourselves (assuming you use <i>SOCK_RAW</i> type sockets). Bear in mind that the field values in that header have to be in network order.
+</blockquote></li>
+<li>The <i>ODR</i> process also creates a domain datagram socket for communication with application processes at the node, and binds the socket to a &#8216;well known&#8217; <i>sun_path</i> name for the <i>ODR</i> service.<br><br></li>
+
+</ul>
+
+<p>Because it is dealing with fixed topologies, <i>ODR</i> is, by and large, considerably simpler than <i>AODV</i>. In particular, discovered routes are relatively stable and there is no need for all the paraphernalia that goes with the possibility of routes changing (such as maintenance of active nodes in the routing tables and timeout mechanisms; timeouts on reverse links; <i>lifetime</i> field in the <i>RREP</i> messages; <i>etc</i>.)</p>
+
+<p>Nor will we be implementing <i>source_sequence_#</i>s (in the <i>RREQ</i> messages), and <i>dest_sequence_#</i> (in <i>RREQ</i> and <i>RREP</i> messages). In reality, we <b>should</b> (though we will not, for the sake of simplicity, be doing so) implement some sort of sequence number mechanism, or some alternative mechanism such as <i>split-horizon</i> for example, if we are to avoid possible scenarios of routing loops in a &#8220;count to infinity&#8221; context (I shall explain this point in class).</p>
+
+<p>However, we want <i>ODR</i> to discover shortest-hop paths, and we want it to do so in a reasonably efficient manner. This necessitates having one or two aspects of its operations work in a different, possibly slightly more complicated, way than <i>AODV</i> does. <i>ODR</i> has several basic responsibilities&nbsp;:</p>
+
+<ul>
+<li>Build and maintain a routing table. For each destination in the table, the routing table structure should include, at a minimum, the next-hop node (in the form of the <i>Ethernet</i> address for that node) and outgoing interface index, the number of hops to the destination, and a timestamp of when the the routing table entry was made or last &#8220;reconfirmed&#8221;&nbsp;/&nbsp;updated. Note that a destination node in the table is to be identified <b>only</b> by its &#8216;canonical&#8217; <i>IP</i> address, and not by any other <i>IP</i> addresses the node has.<br><br></li>
+<li>Generate a <i>RREQ</i> in response to a time client calling <i>msg_send</i> for a destination for which <i>ODR</i> has no route (or for which a route exists, but <i>msg_send</i> has the <i>flag</i> parameter set or the route has gone &#8216;stale&#8217; &ndash; see below), and &#8216;flood&#8217; the RREQ out on all the node&#8217;s interfaces (except for the interface it came in on and, of course, the interfaces <i>eth0</i> and <i>lo</i>).
+<blockquote>
+Flooding is done using an <i>Ethernet</i> broadcast destination address (0xff:ff:ff:ff:ff:ff) in the outgoing frame header.
+<br><br>
+Note that a copy of the broadcast packet is supposed to / might be looped back to the node that sends it (see <i>p</i>.&nbsp;535 in the Stevens textbook). <i>ODR</i> will have to take care not to treat these copies as new incoming <i>RREQ</i>s.
+<br><br>
+Also note that <i>ODR</i> at the client node increments the <i>broadcast_id</i> every time it issues a new <i>RREQ</i> for any destination node.
+</blockquote></li>
+<li>When a <i>RREQ</i> is received, <i>ODR</i> has to generate a <i>RREP</i> if it is at the destination node, or if it is at an intermediate node that happens to have a route (which is not &#8216;stale&#8217; &ndash; see below) to the destination. Otherwise, it must propagate the <i>RREQ</i> by flooding it out on all the node&#8217;s interfaces (except the interface the <i>RREQ</i> arrived on).
+<blockquote>
+Note that as it processes received <i>RREQ</i>s, <i>ODR</i> should enter the &#8216;reverse&#8217; route back to the source node into its routing table, or update an existing entry back to the source node if the <i>RREQ</i> received shows a shorter-hop route, or a route with the same number of hops but going through a different neighbour. The timestamp associated with the table entry should be updated whenever an existing route is either &#8220;reconfirmed&#8221 or updated. Obviously, if the node is going to generate a <i>RREP</i>, updating an existing entry back to the source node with a more efficient route, or a same-hops route using a different neighbour, should be done before the <i>RREP</i> is generated.<br><br>
+Unlike <i>AODV</i>, when an intermediate node receives a <i>RREQ</i> for which it generates a <i>RREP</i>, it should nevertheless continue to flood the <i>RREQ</i> it received if the <i>RREQ</i>  pertains to a source node whose existence it has heretofore been unaware of, or the <i>RREQ</i> gives it a more efficient route than it knew of back to the source node (the reason for continuing to flood the <i>RREQ</i> is so that other nodes in the <i>intranet</i> also become aware of the existence of the source node or of the potentially more optimal reverse route to it, and update their tables accordingly). However, since an <i>RREP</i> for this <i>RREQ</i> is being sent by our node, we do not want other nodes who receive the <i>RREQ</i> propagated by our node, and who might be in a position to do so, to also send <i>RREP</i>s. So we need to introduce a field in the <i>RREQ</i> message, not present in the <i>AODV</i> specifications, which acts like a &#8220;<i>RREP already sent</i>&#8221; field. Our node sets this field before further propagating the <i>RREQ</i> and nodes receiving an <i>RREQ</i> with this field set do not send <i>RREP</i>s in response, even if they are in a position to do so.<br><br>
+<i>ODR</i> may, of course, receive multiple, distinct instances of the <b>same</b> <i>RREQ</i> (the combination of <i>source_addr</i> and <i>broadcast_id</i> uniquely identifies the <i>RREQ</i>). Such <i>RREQ</i>s should not be flooded out unless they have a lower hop count than instances of that <i>RREQ</i> that had previously been received.<br><br>
+By the same token, if <i>ODR</i> is in a position to send out a <i>RREP</i>, and has already done so for this, now repeating, <i>RREQ</i>&nbsp;,&nbsp; it should not send out another <i>RREP</i> unless the <i>RREQ</i> shows a more efficient, previously unknown, reverse route back to the source node. In other words, <i>ODR</i> should not generate essentially duplicative <i>RREP</i>s, nor generate <i>RREP</i>s to instances of <i>RREQ</i>s that reflect reverse routes to the source that are not more efficient than what we already have.
+</blockquote></li>
+<li>Relay <i>RREP</i>s received back to the source node (this is done using the &#8216;reverse&#8217; route entered into the routing table when the corresponding <i>RREQ</i> was processed). At the same time, a &#8216;forward&#8217; path to the destination is entered into the routing table. <i>ODR</i> could receive multiple, distinct <i>RREP</i>s for the same <i>RREQ</i>. The &#8216;forward&#8217; route entered in the routing table should be updated to reflect the shortest-hop route to the destination, and <i>RREP</i>s reflecting suboptimal routes should not be relayed back to the source.<br>
+In general, maintaining a route and its associated timestamp in the table in response to <i>RREP</i>s received is done in the same manner described above for <i>RREQ</i>s.<br><br></li>
+<li>Forward time client/server messages along the next hop.
+<blockquote>
+<b><font color="red">(The following is important &#8211; you will lose points if you do not implement it.)</font></b><br>
+Note that such <i>application payload</i> messages (especially if they are the initial request from the client to the server, rather than the server response back to the client) can be like &#8220;free&#8221; <i>RREP</i>s, enabling nodes along the path from source (client) to destination (server) node to build a reverse path back to the client node whose existence they were heretofore unaware of (or, possibly, to update an existing route with a more optimal one). Before it forwards an <i>application payload</i> message along the next hop, <i>ODR</i> at an intermediate node (and also at the final destination node) should use the message to update its routing table in this way. Thus, calls to <i>msg_send</i> by time servers should never cause <i>ODR</i> at the server node to initiate <i>RREQ</i>s, since the receipt of a time client request implies that a route back to the client node should now exist in the routing table. The only exception to this is if the server node has a <i>staleness</i> parameter of zero (see below).
+</blockquote></li>
+<li>A routing table entry has associated with it a timestamp that gives the time the entry was made into the table. When a client at a node calls <i>msg_send</i>, and if an entry for the destination node already exists in the routing table, <i>ODR</i> first checks that the routing information is not &#8216;<i>stale</i>&#8217;. A stale routing table entry is one that is older than the value defined by the <i>staleness</i> parameter given as a command line argument to the <i>ODR</i> process when it is executed. <i>ODR</i> deletes stale entries (as well as non-stale entries when the <i>flag</i> parameter in <i>msg_send</i> is set) and initiates a route rediscovery by issuing a <i>RREQ</i> for the destination node. This will force periodic updating of the routing tables to take care of failed nodes along the current path, <i>Ethernet</i> addresses that might have changed, and so on. Similarly, as <i>RREQ</i>s propagate through the <i>intranet</i>, existing stale table entries at intermediate nodes are deleted and new route discoveries propagated. As noted above when discussing the processing of <i>RREQ</i>s and <i>RREP</i>s, the associated timestamp for an existing table entry is updated in response to having the route either &#8220;reconfirmed&#8221; or updated (this applies to both reverse routes, by virtue of <i>RREQ</i>s received, and to forward routes, by virtue of <i>RREP</i>s). Finally, note that a <i>staleness</i> parameter of 0 essentially indicates that the discovered route will be used only once, when first discovered, and then discarded. Effectively, an <i>ODR</i> with <i>staleness</i> parameter 0 maintains no real routing table at all&nbsp;;&nbsp; instead, it forces route discoveries at every step of its operation.
+<blockquote>As a practical matter, <i>ODR</i> should be run with <i>staleness</i> parameter values that are considerably larger than the longest <i>RTT</i> on the <i>intranet</i>, otherwise performance will degrade considerably (and collapse entirely as the parameter values approach 0). Nevertheless, for robustness, we need to implement a mechanism by which an intermediate node that receives a <i>RREP</i> or <i>application payload</i> message for forwarding and finds that its relevant routing table entry has since gone stale, can intiate a <i>RREQ</i> to rediscover the route it needs.</blockquote></li>
+</ul><br>
+
+<p><i>RREQ</i>, <i>RREP</i>, and time client/server request/response messages will all have to be carried as encapsulated <i>ODR</i> protocol messages that form the data payload of <i>Ethernet</i> frames. So we need to design the structure of <i>ODR</i> protocol messages. The format should contain a <i>type</i> field (0 for <i>RREQ</i>, 1 for <i>RREP</i>, 2 for <i>application payload</i>&nbsp;). The remaining fields in an <i>ODR</i> message will depend on what type it is. The fields needed for (our simplified versions of <i>AODV</i>&#8217;s) <i>RREQ</i> and <i>RREP</i> should be fairly clear to you, but keep in mind that you need to introduce two extra fields:
+
+<ul>
+<li>The &#8220;<i>RREP already sent</i>&#8221; bit or field in <i>RREQ</i> messages, as mentioned above.<br><br></li>
+<li>A &#8220;<i>forced discovery</i>&#8221; bit or field in both <i>RREQ</i> and <i>RREP</i> messages:<br><br>
+<ul>
+<li>When a client application forces route rediscovery, this bit should be set in the <i>RREQ</i> issued by the client node <i>ODR</i>.<br><br></li>
+<li>Intermediate nodes that are not the destination node but which do have a route to the destination node should <b>not</b> respond with <i>RREP</i>s to an <i>RREQ</i> which has the <i>forced discovery</i> field set. Instead, they should continue to flood the <i>RREQ</i> so that it eventually reaches the destination node which will then respond with an <i>RREP</i>.<br><br></li>
+<li>The intermediate nodes relaying such an <i>RREQ</i> <b>must</b> update their &#8216;reverse&#8217; route back to the source node accordingly, even if the new route is less efficient (<i>i.e.</i>, has more hops) than the one they currently have in their routing table.<br><br></li>
+<li> The destination node responds to the <i>RREQ</i> with an <i>RREP</i> in which this field is also set.<br><br></li>
+<li> Intermediate nodes that receive such a <i>forced discovery</i> <i>RREP</i> <b>must</b> update their &#8216;forward&#8217; route to the destination node accordingly, even if the new route is less efficient (<i>i.e.</i>, has more hops) than the one they currently have in their routing table.<br><br></li>
+<li>This behaviour will cause a <i>forced discovery</i> <i>RREQ</i> to be responded to only by the destination node itself and not any other node, and will cause intermediate nodes to update their routing tables to both source and destination nodes in accordance with the latest routing information received, to cover the possibility that older routes are no longer valid because nodes and/or links along their paths have gone down.</li>
+</ul></li>
+</ul>
+
+<p>A type&nbsp;2, <i>application payload</i>, message needs to contain the following type of information&nbsp;:</p>
+
+<ul>
+<li><i>type</i>&nbsp; =&nbsp; 2
+<li>&#8216;canonical&#8217; <i>IP</i> address of source node</li>
+<li>&#8216;port&#8217; number of source application process (This, of course, is not a real port number in the <i>TCP</i>/<i>UDP</i> sense, but simply a value that <i>ODR</i> at the source node uses to designate the <i>sun_path</i> name for the source application&#8217;s domain socket.)</li>
+<li>&#8216;canonical&#8217; <i>IP</i> address of destination node</li>
+<li>&#8216;port&#8217; number of destination application process (This is passed to <i>ODR</i> by the application process at the source node when it calls <i>msg_send</i>. Its designates the <i>sun_path</i> name for an application&#8217;s domain socket at the destination node.)</li>
+<li>hop count (This starts at 0 and is incremented by 1 at each hop so that <i>ODR</i> can make use of the message to update its routing table, as discussed above.)</li>
+<li>number of bytes in application message</li>
+</ul>
+
+<p>The fields above essentially constitute a &#8216;header&#8217; for the <i>ODR</i> message. Note that fields which you choose to have carry numeric values (rather than ascii characters, for example) must be in network byte order. <i>ODR</i>-defined numeric-valued fields in <i>type</i>&nbsp;0, <i>RREQ</i>, and <i>type</i>&nbsp;1, <i>RREP</i>, messages must, of course, also be in network byte order.</p>
+
+<p>Also note that only the &#8216;canonical&#8217; <i>IP</i> addresses are used for the source and destination nodes in the <i>ODR</i> header. The same has to be true in the headers for <i>type</i>&nbsp;0, <i>RREQ</i>, and <i>type</i>&nbsp;1, <i>RREP</i>, messages. The general rule is that <i>ODR</i> messages only carry &#8216;canonical&#8217; <i>IP</i> node addresses.</p>
+
+<p>The last field in the <i>type</i>&nbsp;2 <i>ODR</i> message is essentially the data payload of the message.</p>
+
+<ul>
+<li>application message given in the call to <i>msg_send</i></li>
+</ul>
+
+<p>An <i>ODR</i> protocol message is encapsulated as the data payload of an <i>Ethernet</i> frame whose header it fills in as follows&nbsp;:</p>
+
+<ul>
+<li>source address&nbsp; =&nbsp; <i>Ethernet</i> address of outgoing interface of the current node where <i>ODR</i> is processing the message.</li>
+<li>destination address&nbsp; =&nbsp; <i>Ethernet</i> broadcast address for <i>type</i>&nbsp;0 messages; <i>Ethernet</i> address of next hop node for <i>type</i>&nbsp;1&nbsp;&amp;&nbsp;2 messages.</li>
+<li><i>protocol</i> field&nbsp; =&nbsp; <i>protocol</i> value for the <i>ODR</i> <i>PF_PACKET</i> socket(s).</li>
+</ul>
+
+<p>Last but not least, whenever <i>ODR</i> writes an <i>Ethernet</i> frame out through its socket, it prints out on <i>stdout</i> the message<br>
+<font face="arial">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<i>ODR</i> at node&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp;: sending&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; frame&nbsp; hdr&nbsp;&nbsp;&nbsp; src&nbsp; vm&nbsp;<i>i<sub>1</sub></i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; dest&nbsp; <i>addr</i><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <i>ODR</i> msg&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; type&nbsp;<i>n</i>&nbsp;&nbsp;&nbsp;&nbsp; src&nbsp; vm&nbsp;<i>i<sub>2</sub></i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; dest&nbsp; vm&nbsp;<i>i<sub>3</sub></i></font><br>
+where <i>addr</i> is in presentation format (<i>i.e.</i>, hexadecimal <i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>:<i>xx</i>) and gives the destination <i>Ethernet</i> address in the outgoing frame header. Other nodes in the message should be identified by their <i>vm</i> name. A message should be printed out for <b>each</b> packet sent out on a distinct interface.</p>
+
+<h2><i>ODR</i> and the <i>API</i></h2>
+
+<p>When the <i>ODR</i> process first starts, it must construct a table in which it enters all well-known &#8216;port&#8217; numbers and their corresponding <i>sun_path</i> names. These will constitute permanent entries in the table.</p>
+
+<p>Thereafter, whenever it reads a message off its domain socket, it must obtain the <i>sun_path</i> name for the peer process socket and check whether that name is entered in the table. If not, it must select an &#8216;ephemeral&#8217; &#8216;port&#8217; value by which to designate the peer <i>sun_path</i> name and enter the pair&nbsp; &lt;&nbsp;port&nbsp;value&nbsp;,&nbsp;<i>sun_path</i>&nbsp;name&nbsp;&gt;&nbsp; into the table. Such entries cannot be permanent otherwise the table will grow unboundedly in time, with entries surviving for ever, beyond the peer processes&#8217; demise. We must associate a <i>time_to_live</i> field with a non-permanent table entry, and purge the entry if nothing is heard from the peer for that amount of time. Every time a peer process for which a non-permanent table entry exists communicates with <i>ODR</i>, its <i>time_to_live</i> value should be reinitialized.</p>
+
+<blockquote>
+Note that when <i>ODR</i> writes to a peer, it is possible for the write to fail because the peer does not exist&nbsp;:&nbsp; it could be a &#8216;well-known&#8217; service that is not running, or we could be in the interval between a process with a non-permanent table entry terminating and the expiration of its <i>time_to_live</i> value.
+</blockquote>
+
+<h2>Notes</h2>
+
+<ul>
+<li>A proper implementation of <i>ODR</i> would probably require that <i>RREQ</i> and <i>RREP</i> messages be backed up by some kind of timeout and retransmission mechanism since the network transmission environment is not reliable. This would considerably complicate the implementation (because at any given moment, a node could have multiple <i>RREQ</i>s that it has flooded out, but for which it has still not received <i>RREP</i>s; the situation is further complicated by the fact that not all intermediate nodes receiving and relaying <i>RREQ</i>s necessarily lie on a path to the destination, and therefore should expect to receive <i>RREP</i>s), and, learning-wise, would not add much to the experience you should have gained from Assignment&nbsp;2.</li>
+</ul>
+
+<h2><a name="handin">Hand-in</a></h2>
+
+<p>Unlike previous assignments, <font color="#FF0000"><b>you will submit your code on the <i>minix</i> node, using a slightly modified procedure</b></font>: please click on &nbsp;<a target="_blank" href="handin3.html">electronic&nbsp;hand-in</a> &nbsp;and read.</p>
+
+<p>Each group hands in just one copy of the Assignment, under either partner&#8217;s login name. If you mis-coordinate with your partner and each hands in a copy under his/her name, make sure one of you resubmits just a Readme file, and nothing else, saying something to the effect of &#8220;Please ignore this submission&#8221;. Please do not make us grade the same thing twice over because you are unable to get this simple coordination with your partner straight.</p>
+
+<p>Your submission must absolutely include:</p>
+
+<blockquote>
+a <i>Readme</i> file containing an identification of the members in the group;<br>
+</blockquote>
+
+<blockquote>
+a <i>Makefile</i> which
+<ul>
+<li>compiles your code using, where necessary, the Stevens&#8217; environment in the course account on the <i>minix</i> node, &nbsp;<i>/users/cse533/Stevens/unpv13e</i>&nbsp;; &nbsp;and<br><br></li>
+<li>gives standard names <i>ODR</i>_&lt;<i>login</i>&gt;, <i>server</i>_&lt;<i>login</i>&gt;, <i>client</i>_&lt;<i>login</i>&gt; for the executables produced (note the underscore in the executable names), where &lt;<i>login</i>&gt; is the login name your group uses to hand in its copy of the assignment.</li></ul>
+</blockquote><br>
+
+<p></p><hr><p></p>
+
+  <p>
+    <a href="http://validator.w3.org/check/referer"><img border="0"
+
+        src="http://www.w3.org/Icons/valid-html401"
+
+        alt="Valid HTML 4.01!" height="31" width="88"></a>
+
+    <a href="http://jigsaw.w3.org/css-validator/">
+
+       <img width="88" height="31" border="0"
+
+            src="http://jigsaw.w3.org/css-validator/images/vcss"
+ 
+             alt="Valid CSS!"></a>
+
+  </p>
+
+</body>
+</html>
